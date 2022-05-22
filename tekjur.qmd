@@ -23,6 +23,7 @@ library(cowplot)
 library(ggthemes)
 library(ggtext)
 library(gganimate)
+library(lubridate)
 ```
 
 # Lesa inn gögn
@@ -62,7 +63,9 @@ d <- pxweb_get(url, query = pxweb_query(query_list), verbose = FALSE) |>
 
 ## 2014 - 2021
 
-### Krónutölubreyting
+### Kyn == Alls
+
+#### Krónutölubreyting
 
 ```{r, fig.width = 10, fig.asp = 0.6, out.width = "100%"}
 plot_dat <- d |> 
@@ -160,17 +163,254 @@ p <- plot_dat |>
          caption = "Kóði: https://github.com/bgautijonsson/tekjur")
 
 p
-
-p
-
 ggsave(plot = p, filename = "hlutf_breyting_2014-2021.png",
        width = 8, height = 0.7 * 8, scale = 1.3, bg = "white")
 ```
 
+### Kyn != Alls
+
+#### Krónutölubreyting
+
+```{r, fig.width = 10, fig.asp = 0.6, out.width = "100%"}
+plot_dat <- d |> 
+    filter(kyn != "Alls",
+           ar %in% c(2014, 2021),
+           !starfsstett %in% c("Alls", "Iðnaðarmenn", "Verkafólk")) |> 
+    mutate(launthegahopur = fct_recode(launthegahopur,
+                                       "Almennur markaður" = "Starfsmenn á almennum vinnumarkaði",
+                                       "Hið opinbera" = "Opinberir starfsmenn - alls") |> 
+               as.character() |> 
+               as_factor(),
+           laun = laun * 1000,
+           ar = ifelse(ar == max(ar), "eftir", "fyrir")) |> 
+    pivot_wider(names_from = ar, values_from = laun) |> 
+    mutate(munur = eftir - fyrir,
+           nr = starfsstett |> str_replace_all("[a-zA-Z áíéóðþö \\-]", "") |> parse_number(),
+           starfsstett = str_replace(starfsstett, "\\([0-9]\\)", ""),
+           starfsstett = fct_reorder(starfsstett, nr))
+
+p <- plot_dat |> 
+    ggplot(aes(eining, munur)) +
+    geom_line(aes(lty = launthegahopur, col = kyn)) +
+    geom_rangeframe() +
+    scale_x_continuous(limits = c(0, 1.08),
+                       labels = label_percent(),
+                       breaks = seq(0.1, 0.9, by = 0.1),
+                       expand = expansion()) +
+    scale_y_continuous(labels = label_number()) +
+    scale_colour_brewer(type = "qual", palette = "Set1") +
+    guides(lty = guide_legend(label.position = "top", keywidth = unit(0.1, "npc")),
+           col = guide_legend(label.position = "top", keywidth = unit(0.1, "npc"))) +
+    facet_wrap("starfsstett", scales = "free_y") +
+    theme_tufte() +
+    theme(legend.position = "top",
+          legend.box.margin = margin(),
+          legend.margin = margin(l = 2, r = 2),
+          axis.title.y = element_text(hjust = 0),
+          axis.title.x = element_text(hjust = 0)) +
+    labs(x = "Tekjutíund",
+         y = "Launahækkun (Krónur)",
+         lty = NULL,
+         col = NULL,
+         title = "Dreifing launahækkana (í krónutölu) frá 2014 - 2021",
+         subtitle = NULL,
+         caption = "Kóði: https://github.com/bgautijonsson/tekjur")
+
+p
+
+ggsave(plot = p, filename = "kr_breyting_2014-2021-kyn.png",
+       width = 8, height = 0.7 * 8, scale = 1.3, bg = "white")
+```
+
+#### Prósentubreyting
+
+```{r, fig.width = 10, fig.asp = 0.6, out.width = "100%"}
+plot_dat <- d |> 
+    filter(kyn != "Alls",
+           ar %in% c(2014, 2021),
+           !starfsstett %in% c("Alls", "Iðnaðarmenn", "Verkafólk")) |> 
+    mutate(launthegahopur = fct_recode(launthegahopur,
+                                       "Almennur markaður" = "Starfsmenn á almennum vinnumarkaði",
+                                       "Hið opinbera" = "Opinberir starfsmenn - alls") |> 
+               as.character() |> 
+               as_factor(),
+           laun = laun * 1000,
+           ar = ifelse(ar == max(ar), "eftir", "fyrir")) |> 
+    pivot_wider(names_from = ar, values_from = laun) |> 
+    mutate(munur = eftir/fyrir,
+           nr = starfsstett |> str_replace_all("[a-zA-Z áíéóðþö \\-]", "") |> parse_number(),
+           starfsstett = str_replace(starfsstett, "\\([0-9]\\)", ""),
+           starfsstett = fct_reorder(starfsstett, nr))
+
+p <- plot_dat |> 
+    ggplot(aes(eining, munur)) +
+    geom_line(aes(lty = launthegahopur, col = kyn)) +
+    # geom_text(data = plot_dat |> filter(eining == max(eining)),
+    #           aes(label = launthegahopur),
+    #           hjust = 0, nudge_x = 0.01) +
+    geom_rangeframe() +
+    scale_x_continuous(limits = c(0, 1.08),
+                       labels = label_percent(),
+                       breaks = seq(0.1, 0.9, by = 0.1),
+                       expand = expansion()) +
+    scale_y_continuous(labels = function(x) percent(x - 1)) +
+    scale_colour_brewer(type = "qual", palette = "Set1") +
+    guides(lty = guide_legend(label.position = "top", keywidth = unit(0.1, "npc")),
+           col = guide_legend(label.position = "top", keywidth = unit(0.1, "npc"))) +
+    facet_wrap("starfsstett", scales = "free_y") +
+    theme_tufte() +
+    theme(legend.position = "top",
+          legend.box.margin = margin(),
+          legend.margin = margin(l = 2, r = 2),
+          axis.title.y = element_text(hjust = 0),
+          axis.title.x = element_text(hjust = 0)) +
+    labs(x = "Tekjutíund",
+         y = "Launahækkun (%)",
+         lty = NULL,
+         col = NULL,
+         title = "Dreifing launahækkana (í prósentum) frá 2014 - 2021",
+         subtitle = NULL,
+         caption = "Kóði: https://github.com/bgautijonsson/tekjur")
+
+p
+
+ggsave(plot = p, filename = "hlutf_breyting_2014-2021-kyn.png",
+       width = 8, height = 0.7 * 8, scale = 1.3, bg = "white")
+```
+
+#### Starfsstéttir
+
+##### Stjórnendur
+
+###### Krónutölubreyting
+
+```{r, fig.width = 10, fig.asp = 0.6, out.width = "100%"}
+plot_dat <- d |> 
+    filter(kyn != "Alls",
+           ar %in% c(2014, 2021),
+           !starfsstett %in% c("Alls", "Iðnaðarmenn", "Verkafólk")) |> 
+    mutate(launthegahopur = fct_recode(launthegahopur,
+                                       "Almennur markaður" = "Starfsmenn á almennum vinnumarkaði",
+                                       "Hið opinbera" = "Opinberir starfsmenn - alls") |> 
+               as.character() |> 
+               as_factor(),
+           laun = laun * 1000,
+           ar = ifelse(ar == max(ar), "eftir", "fyrir")) |> 
+    pivot_wider(names_from = ar, values_from = laun) |> 
+    mutate(munur = eftir - fyrir,
+           nr = starfsstett |> str_replace_all("[a-zA-Z áíéóðþö \\-]", "") |> parse_number(),
+           starfsstett = str_replace(starfsstett, "\\([0-9]\\)", "") |> str_squish(),
+           starfsstett = fct_reorder(starfsstett, nr)) |> 
+    filter(starfsstett == "Stjórnendur")
+
+p1 <- plot_dat |> 
+    ggplot(aes(eining, munur)) +
+    geom_line(aes(lty = launthegahopur, col = kyn)) +
+    geom_rangeframe() +
+    scale_x_continuous(limits = c(0, 1.08),
+                       labels = label_percent(),
+                       breaks = seq(0.1, 0.9, by = 0.1),
+                       expand = expansion()) +
+    scale_y_continuous(labels = label_number()) +
+    scale_colour_brewer(type = "qual", palette = "Set1") +
+    guides(lty = guide_legend(label.position = "top", keywidth = unit(0.1, "npc")),
+           col = guide_legend(label.position = "top", keywidth = unit(0.1, "npc"))) +
+    # facet_wrap("starfsstett", scales = "free_y") +
+    theme_tufte() +
+    theme(legend.position = "top",
+          legend.box.margin = margin(),
+          legend.margin = margin(l = 2, r = 2),
+          axis.title.y = element_text(hjust = 0),
+          axis.title.x = element_text(hjust = 0)) +
+    labs(x = "Tekjutíund",
+         y = "Launahækkun (Krónur)",
+         lty = NULL,
+         col = NULL,
+         title = "Dreifing launahækkana stjórnenda (í krónutölu) frá 2014 - 2021",
+         subtitle = NULL,
+         caption = "Kóði: https://github.com/bgautijonsson/tekjur")
+
+p1
+
+ggsave(plot = p1, filename = "kr_breyting_2014-2021-kyn_stjornendur.png",
+       width = 8, height = 0.5 * 8, scale = 1.3, bg = "white")
+```
+
+###### Prósentubreyting
+
+```{r, fig.width = 10, fig.asp = 0.6, out.width = "100%"}
+plot_dat <- d |> 
+    filter(kyn != "Alls",
+           ar %in% c(2014, 2021),
+           !starfsstett %in% c("Alls", "Iðnaðarmenn", "Verkafólk")) |> 
+    mutate(launthegahopur = fct_recode(launthegahopur,
+                                       "Almennur markaður" = "Starfsmenn á almennum vinnumarkaði",
+                                       "Hið opinbera" = "Opinberir starfsmenn - alls") |> 
+               as.character() |> 
+               as_factor(),
+           laun = laun * 1000,
+           ar = ifelse(ar == max(ar), "eftir", "fyrir")) |> 
+    pivot_wider(names_from = ar, values_from = laun) |> 
+    mutate(munur = eftir/fyrir,
+           nr = starfsstett |> str_replace_all("[a-zA-Z áíéóðþö \\-]", "") |> parse_number(),
+           starfsstett = str_replace(starfsstett, "\\([0-9]\\)", "") |> str_squish(),
+           starfsstett = fct_reorder(starfsstett, nr)) |> 
+    filter(starfsstett == "Stjórnendur")
+
+p2 <- plot_dat |> 
+    ggplot(aes(eining, munur)) +
+    geom_line(aes(lty = launthegahopur, col = kyn)) +
+    # geom_text(data = plot_dat |> filter(eining == max(eining)),
+    #           aes(label = launthegahopur),
+    #           hjust = 0, nudge_x = 0.01) +
+    geom_rangeframe() +
+    scale_x_continuous(limits = c(0, 1.08),
+                       labels = label_percent(),
+                       breaks = seq(0.1, 0.9, by = 0.1),
+                       expand = expansion()) +
+    scale_y_continuous(labels = function(x) percent(x - 1)) +
+    scale_colour_brewer(type = "qual", palette = "Set1") +
+    guides(lty = guide_legend(label.position = "top", keywidth = unit(0.1, "npc")),
+           col = guide_legend(label.position = "top", keywidth = unit(0.1, "npc"))) +
+    # facet_wrap("starfsstett", scales = "free_y") +
+    theme_tufte() +
+    theme(legend.position = "top",
+          legend.box.margin = margin(),
+          legend.margin = margin(l = 2, r = 2),
+          axis.title.y = element_text(hjust = 0),
+          axis.title.x = element_text(hjust = 0)) +
+    labs(x = "Tekjutíund",
+         y = "Launahækkun (%)",
+         lty = NULL,
+         col = NULL,
+         title = "Dreifing launahækkana stjórnenda (í prósentum) frá 2014 - 2021",
+         subtitle = NULL,
+         caption = "Kóði: https://github.com/bgautijonsson/tekjur")
+
+p2
+
+ggsave(plot = p2, filename = "hlutf_breyting_2014-2021-kyn_stjornendur.png",
+       width = 8, height = 0.5 * 8, scale = 1.3, bg = "white")
+```
+
+###### Saman
+
+```{r, fig.asp=0.5}
+p <- plot_grid(p1 + labs(caption = NULL) + theme(legend.justification = c(2.6, 0)),
+          p2 + theme(legend.position = "none", plot.margin = margin(t = 45, r = 5, b = 5, l = 5)) +
+              labs(x = NULL, y = "Launahækkun (%)", title = ""))
+
+ggsave(plot = p, filename = "breyting_2014-2021-kyn_stjornendur.png",
+       width = 8, height = 0.5 * 8, scale = 1.3, bg = "white")
+```
+
+
 
 ## 2019 - 2021
 
-### Krónutölubreyting
+### Kyn == Alls
+
+#### Krónutölubreyting
 
 ```{r, fig.width = 10, fig.asp = 0.6, out.width = "100%"}
 plot_dat <- d |> 
@@ -220,7 +460,7 @@ ggsave(plot = p, filename = "kr_breyting_2019-2021.png",
        width = 8, height = 0.7 * 8, scale = 1.3, bg = "white")
 ```
 
-### Prósentubreyting
+#### Prósentubreyting
 
 ```{r, fig.width = 10, fig.asp = 0.6, out.width = "100%"}
 plot_dat <- d |> 
@@ -275,8 +515,180 @@ ggsave(plot = p, filename = "hlutf_breyting_2019-2021.png",
        width = 8, height = 0.7 * 8, scale = 1.3, bg = "white")
 ```
 
+### Kyn != Alls
+
+#### Krónutölubreyting
+
+```{r, fig.width = 10, fig.asp = 0.6, out.width = "100%"}
+plot_dat <- d |> 
+    filter(kyn != "Alls",
+           ar %in% c(2019, 2021),
+           !starfsstett %in% c("Alls", "Iðnaðarmenn", "Verkafólk")) |> 
+    mutate(launthegahopur = fct_recode(launthegahopur,
+                                       "Almennur markaður" = "Starfsmenn á almennum vinnumarkaði",
+                                       "Hið opinbera" = "Opinberir starfsmenn - alls") |> 
+               as.character() |> 
+               as_factor(),
+           laun = laun * 1000,
+           ar = ifelse(ar == max(ar), "eftir", "fyrir")) |> 
+    pivot_wider(names_from = ar, values_from = laun) |> 
+    mutate(munur = eftir - fyrir,
+           nr = starfsstett |> str_replace_all("[a-zA-Z áíéóðþö \\-]", "") |> parse_number(),
+           starfsstett = str_replace(starfsstett, "\\([0-9]\\)", ""),
+           starfsstett = fct_reorder(starfsstett, nr))
+
+p <- plot_dat |> 
+    ggplot(aes(eining, munur)) +
+    geom_line(aes(lty = launthegahopur, col = kyn)) +
+    geom_rangeframe() +
+    scale_x_continuous(limits = c(0, 1.08),
+                       labels = label_percent(),
+                       breaks = seq(0.1, 0.9, by = 0.1),
+                       expand = expansion()) +
+    scale_y_continuous(labels = label_number()) +
+    scale_colour_brewer(type = "qual", palette = "Set1") +
+    guides(lty = guide_legend(label.position = "top", keywidth = unit(0.1, "npc")),
+           col = guide_legend(label.position = "top", keywidth = unit(0.1, "npc"))) +
+    facet_wrap("starfsstett", scales = "free_y") +
+    theme_tufte() +
+    theme(legend.position = "top",
+          legend.box.margin = margin(),
+          legend.margin = margin(l = 2, r = 2),
+          axis.title.y = element_text(hjust = 0),
+          axis.title.x = element_text(hjust = 0)) +
+    labs(x = "Tekjutíund",
+         y = "Launahækkun (Krónur)",
+         lty = NULL,
+         col = NULL,
+         title = "Dreifing launahækkana (í krónutölu) frá 2019 - 2021",
+         subtitle = NULL,
+         caption = "Kóði: https://github.com/bgautijonsson/tekjur")
+
+p
+
+ggsave(plot = p, filename = "kr_breyting_2019-2021-kyn.png",
+       width = 8, height = 0.7 * 8, scale = 1.3, bg = "white")
+```
+
+#### Prósentubreyting
+
+```{r, fig.width = 10, fig.asp = 0.6, out.width = "100%"}
+plot_dat <- d |> 
+    filter(kyn != "Alls",
+           ar %in% c(2019, 2021),
+           !starfsstett %in% c("Alls", "Iðnaðarmenn", "Verkafólk")) |> 
+    mutate(launthegahopur = fct_recode(launthegahopur,
+                                       "Almennur markaður" = "Starfsmenn á almennum vinnumarkaði",
+                                       "Hið opinbera" = "Opinberir starfsmenn - alls") |> 
+               as.character() |> 
+               as_factor(),
+           laun = laun * 1000,
+           ar = ifelse(ar == max(ar), "eftir", "fyrir")) |> 
+    pivot_wider(names_from = ar, values_from = laun) |> 
+    mutate(munur = eftir/fyrir,
+           nr = starfsstett |> str_replace_all("[a-zA-Z áíéóðþö \\-]", "") |> parse_number(),
+           starfsstett = str_replace(starfsstett, "\\([0-9]\\)", ""),
+           starfsstett = fct_reorder(starfsstett, nr))
+
+p <- plot_dat |> 
+    ggplot(aes(eining, munur)) +
+    geom_line(aes(lty = launthegahopur, col = kyn)) +
+    # geom_text(data = plot_dat |> filter(eining == max(eining)),
+    #           aes(label = launthegahopur),
+    #           hjust = 0, nudge_x = 0.01) +
+    geom_rangeframe() +
+    scale_x_continuous(limits = c(0, 1.08),
+                       labels = label_percent(),
+                       breaks = seq(0.1, 0.9, by = 0.1),
+                       expand = expansion()) +
+    scale_y_continuous(labels = function(x) percent(x - 1)) +
+    scale_colour_brewer(type = "qual", palette = "Set1") +
+    guides(lty = guide_legend(label.position = "top", keywidth = unit(0.1, "npc")),
+           col = guide_legend(label.position = "top", keywidth = unit(0.1, "npc"))) +
+    facet_wrap("starfsstett", scales = "free_y") +
+    theme_tufte() +
+    theme(legend.position = "top",
+          legend.box.margin = margin(),
+          legend.margin = margin(l = 2, r = 2),
+          axis.title.y = element_text(hjust = 0),
+          axis.title.x = element_text(hjust = 0)) +
+    labs(x = "Tekjutíund",
+         y = "Launahækkun (%)",
+         lty = NULL,
+         col = NULL,
+         title = "Dreifing launahækkana (í prósentum) frá 2019 - 2021",
+         subtitle = NULL,
+         caption = "Kóði: https://github.com/bgautijonsson/tekjur")
+
+p
+
+p
+
+ggsave(plot = p, filename = "hlutf_breyting_2019-2021-kyn.png",
+       width = 8, height = 0.7 * 8, scale = 1.3, bg = "white")
+```
+
+## Þróun heildarlauna
+
+```{r}
+plot_dat <- d |> 
+    filter(kyn != "Alls",
+           !starfsstett %in% c("Alls", "Iðnaðarmenn", "Verkafólk", "Véla- og vélgæslufólk (8)", "Iðnaðarmenn og sérhæft iðnverkafólk (7)")) |> 
+    mutate(launthegahopur = fct_recode(launthegahopur,
+                                       "Almennur markaður" = "Starfsmenn á almennum vinnumarkaði",
+                                       "Hið opinbera" = "Opinberir starfsmenn - alls") |> 
+               as.character() |> 
+               as_factor(),
+           laun = laun * 1000) |> 
+    mutate(nr = starfsstett |> str_replace_all("[a-zA-Z áíéóðþö \\-]", "") |> parse_number(),
+           starfsstett = str_replace(starfsstett, "\\([0-9]\\)", ""),
+           starfsstett = fct_reorder(starfsstett, nr)) 
+
+p <- plot_dat |> 
+    ggplot(aes(eining, laun)) +
+    geom_hline(yintercept = 0, lty = 2) +
+    geom_line(aes(col = kyn, lty = launthegahopur)) +
+    # geom_rangeframe() +
+    scale_x_continuous(limits = c(0.05, 0.95),
+                       labels = label_percent(),
+                       breaks = seq(0.1, 0.9, by = 0.1),
+                       expand = expansion()) +
+    scale_y_continuous(labels = label_number(big.mark = ".",
+                                             decimal.mark = ",",
+                                             suffix = " kr")) +
+    scale_colour_brewer(type = "qual", palette = "Set1") +
+    guides(lty = guide_legend(label.position = "top", keywidth = unit(0.1, "npc")),
+           col = guide_legend(label.position = "top", keywidth = unit(0.1, "npc"))) +
+    facet_wrap("starfsstett", scales = "free_y") +
+    theme_half_open(font_size = 10) +
+    theme(legend.position = "top",
+          legend.justification = c(0.5, -1),
+          legend.box.margin = margin(t = -11, b = -10),
+          legend.margin = margin(l = 2, r = 2),
+          legend.text = element_text(margin = margin(b = -5)),
+          axis.text.y = element_text(size = 8),
+          axis.text.x = element_text(size = 8),
+          axis.title.y = element_blank(),
+          axis.title.x = element_blank()) +
+    labs(x = "Tekjutíund",
+         y = "Launamunur (Opinbert - Almennt)",
+         lty = NULL,
+         col = NULL,
+         title = "Launaþróun á opinberum og almennum vinnumarkað eftir starfsstétt, kyni og tekjutíund",
+         subtitle = str_c("Ár: {frame_time}"),
+         caption = "Kóði: https://github.com/bgautijonsson/tekjur") +
+    transition_time(as.integer(ar)) +
+    ease_aes("cubic-in-out")
+
+p_vid <- animate(p, width = 12, height = 0.5 * 12, unit = "in", res = 300, fps = 25, duration = 8,
+                 renderer = ffmpeg_renderer(format = "mp4"))
+
+anim_save(filename = "launathroun_eftir_kyni.mp4", animation = p_vid)
+```
 
 ## Laun 2021
+
+### Kyn == Alls
 
 ```{r, fig.width = 10, fig.asp = 0.6, out.width = "100%"}
 plot_dat <- d |> 
@@ -322,4 +734,315 @@ p
 
 ggsave(plot = p, filename = "heildarlaun.png",
        width = 8, height = 0.7 * 8, scale = 1.3, bg = "white")
+```
+
+
+### Kyn != Alls
+
+```{r, fig.width = 10, fig.asp = 0.6, out.width = "100%"}
+plot_dat <- d |> 
+    filter(kyn != "Alls",
+           ar %in% c(2021),
+           !starfsstett %in% c("Alls", "Iðnaðarmenn", "Verkafólk",
+                               "Véla- og vélgæslufólk (8)", "Iðnaðarmenn og sérhæft iðnverkafólk (7)")) |> 
+    mutate(launthegahopur = fct_recode(launthegahopur,
+                                       "Almennur markaður" = "Starfsmenn á almennum vinnumarkaði",
+                                       "Hið opinbera" = "Opinberir starfsmenn - alls") |> 
+               as.character() |> 
+               as_factor(),
+           laun = laun * 1000,
+           ar = ifelse(ar == max(ar), "eftir", "fyrir")) |> 
+    mutate(nr = starfsstett |> str_replace_all("[a-zA-Z áíéóðþö \\-]", "") |> parse_number(),
+           starfsstett = str_replace(starfsstett, "\\([0-9]\\)", ""),
+           starfsstett = fct_reorder(starfsstett, nr))
+
+p <- plot_dat |> 
+    ggplot(aes(eining, laun)) +
+    geom_line(aes(lty = launthegahopur, col = kyn)) +
+    geom_rangeframe() +
+    scale_x_continuous(limits = c(0, 1.08),
+                       labels = label_percent(),
+                       breaks = seq(0.1, 0.9, by = 0.1),
+                       expand = expansion()) +
+    scale_y_continuous(labels = label_number()) +
+    scale_colour_brewer(type = "qual", palette = "Set1") +
+    guides(lty = guide_legend(label.position = "top", keywidth = unit(0.1, "npc")),
+           col = guide_legend(label.position = "top", keywidth = unit(0.1, "npc"))) +
+    facet_wrap("starfsstett", scales = "free_y") +
+    theme_tufte() +
+    theme(legend.position = "top",
+          legend.box.margin = margin(),
+          legend.margin = margin(l = 2, r = 2),
+          axis.title.y = element_text(hjust = 0),
+          axis.title.x = element_text(hjust = 0)) +
+    labs(x = "Tekjutíund",
+         y = "Launahækkun (Krónur)",
+         lty = NULL,
+         col = NULL,
+         title = "Dreifing almennra heildarlauna 2021 eftir vinnumarkaði",
+         subtitle = NULL,
+         caption = "Kóði: https://github.com/bgautijonsson/tekjur")
+
+p
+
+ggsave(plot = p, filename = "heildarlaun-kyn.png",
+       width = 8, height = 0.7 * 8, scale = 1.3, bg = "white")
+```
+
+# Launamunur GIF
+
+```{r}
+plot_dat <- d |> 
+    filter(kyn != "Alls",
+           !starfsstett %in% c("Alls", "Iðnaðarmenn", "Verkafólk", "Véla- og vélgæslufólk (8)", "Iðnaðarmenn og sérhæft iðnverkafólk (7)")) |> 
+    mutate(launthegahopur = fct_recode(launthegahopur,
+                                       "Almennur markaður" = "Starfsmenn á almennum vinnumarkaði",
+                                       "Hið opinbera" = "Opinberir starfsmenn - alls") |> 
+               as.character() |> 
+               as_factor(),
+           laun = laun * 1000) |> 
+    mutate(nr = starfsstett |> str_replace_all("[a-zA-Z áíéóðþö \\-]", "") |> parse_number(),
+           starfsstett = str_replace(starfsstett, "\\([0-9]\\)", ""),
+           starfsstett = fct_reorder(starfsstett, nr)) |> 
+    pivot_wider(names_from = launthegahopur, values_from = laun) |> 
+    mutate(munur = `Hið opinbera` - `Almennur markaður`)
+
+p <- plot_dat |> 
+    ggplot(aes(eining, munur)) +
+    geom_hline(yintercept = 0, lty = 2) +
+    geom_line(aes(col = kyn)) +
+    # geom_rangeframe() +
+    scale_x_continuous(limits = c(0.05, 0.95),
+                       labels = label_percent(),
+                       breaks = seq(0.1, 0.9, by = 0.1),
+                       expand = expansion()) +
+    scale_y_continuous(labels = label_number(big.mark = ".",
+                                             decimal.mark = ",",
+                                             suffix = " kr")) +
+    scale_colour_brewer(type = "qual", palette = "Set1") +
+    guides(lty = guide_legend(label.position = "top", keywidth = unit(0.1, "npc")),
+           col = guide_legend(label.position = "top", keywidth = unit(0.1, "npc"))) +
+    facet_wrap("starfsstett", scales = "free_y") +
+    theme_half_open(font_size = 10) +
+    theme(legend.position = "top",
+          legend.justification = c(0.5, -1),
+          legend.box.margin = margin(t = -21, b = -10),
+          legend.margin = margin(l = 2, r = 2),
+          legend.text = element_text(margin = margin(b = -5)),
+          axis.text.y = element_text(size = 8),
+          axis.text.x = element_text(size = 8),
+          axis.title.y = element_blank(),
+          axis.title.x = element_blank()) +
+    labs(x = "Tekjutíund",
+         y = "Launamunur (Opinbert - Almennt)",
+         lty = NULL,
+         col = NULL,
+         title = "Launamunur milli opinbers og almenns vinnumarkaðar eftir starfsstétt, kyni og tekjutíund",
+         subtitle = str_c("Reiknað sem Opinbert - Almennt",
+                          "\n",
+                          "Ár: {frame_time}"),
+         caption = "Kóði: https://github.com/bgautijonsson/tekjur") +
+    transition_time(as.integer(ar)) +
+    ease_aes("cubic-in-out")
+
+p_vid <- animate(p, width = 12, height = 0.5 * 12, unit = "in", res = 300, fps = 25, duration = 8,
+                 renderer = ffmpeg_renderer(format = "mp4"))
+
+anim_save(filename = "munur_opinbert_almennt_eftir_kyni.mp4", animation = p_vid)
+```
+
+# Launamunur GIF
+
+```{r}
+plot_dat <- d |> 
+    filter(kyn != "Alls",
+           !starfsstett %in% c("Alls", "Iðnaðarmenn", "Verkafólk", "Véla- og vélgæslufólk (8)", "Iðnaðarmenn og sérhæft iðnverkafólk (7)")) |> 
+    mutate(launthegahopur = fct_recode(launthegahopur,
+                                       "Almennur markaður" = "Starfsmenn á almennum vinnumarkaði",
+                                       "Hið opinbera" = "Opinberir starfsmenn - alls") |> 
+               as.character() |> 
+               as_factor(),
+           laun = laun * 1000) |> 
+    mutate(nr = starfsstett |> str_replace_all("[a-zA-Z áíéóðþö \\-]", "") |> parse_number(),
+           starfsstett = str_replace(starfsstett, "\\([0-9]\\)", ""),
+           starfsstett = fct_reorder(starfsstett, nr)) |> 
+    pivot_wider(names_from = launthegahopur, values_from = laun) |> 
+    mutate(munur = `Hið opinbera` / `Almennur markaður`)
+
+p <- plot_dat |> 
+    ggplot(aes(eining, munur)) +
+    geom_hline(yintercept = 1, lty = 2) +
+    geom_line(aes(col = kyn)) +
+    # geom_rangeframe() +
+    scale_x_continuous(limits = c(0.05, 0.95),
+                       labels = label_percent(),
+                       breaks = seq(0.1, 0.9, by = 0.1),
+                       expand = expansion()) +
+    scale_y_log10(labels = function(x) percent(x - 1),
+                  breaks = pretty_breaks(5)) +
+    scale_colour_brewer(type = "qual", palette = "Set1") +
+    guides(lty = guide_legend(label.position = "top", keywidth = unit(0.1, "npc")),
+           col = guide_legend(label.position = "top", keywidth = unit(0.1, "npc"))) +
+    facet_wrap("starfsstett", scales = "free_y") +
+    theme_half_open(font_size = 10) +
+    theme(legend.position = "top",
+          legend.justification = c(0.5, -1),
+          legend.box.margin = margin(t = -21, b = -10),
+          legend.margin = margin(l = 2, r = 2),
+          legend.text = element_text(margin = margin(b = -5)),
+          axis.text.y = element_text(size = 8),
+          axis.text.x = element_text(size = 8),
+          axis.title.y = element_blank(),
+          axis.title.x = element_blank()) +
+    labs(x = "Tekjutíund",
+         y = "Launamunur (Opinbert - Almennt)",
+         lty = NULL,
+         col = NULL,
+         title = "Launamunur milli opinbers og almenns vinnumarkaðs eftir starfsstétt, kyni og tekjutíund",
+         subtitle = str_c("Reiknað sem Opinbert / Almennt (jákvæð % = opinbert hærra, neikvæð % = almennt hærra)",
+                          "\n",
+                          "Ár: {frame_time}"),
+         caption = "Kóði: https://github.com/bgautijonsson/tekjur") +
+    transition_time(as.integer(ar)) +
+    ease_aes("cubic-in-out")
+
+p_vid <- animate(p, width = 12, height = 0.5 * 12, unit = "in", res = 300, fps = 25, duration = 8,
+                 renderer = ffmpeg_renderer(format = "mp4"))
+
+anim_save(filename = "hlutf_munur_opinbert_almennt_eftir_kyni.mp4", animation = p_vid)
+```
+
+# Launavísitala
+
+
+
+## Mánaðartölur
+
+```{r}
+url <- "https://px.hagstofa.is:443/pxis/api/v1/is/Samfelag/launogtekjur/2_launavisitala/1_launavisitala/VIS04001.px"
+
+px_vars <- pxweb_get(url)
+
+query_list <- list(
+    "Ár" = c("*"),
+    "Mánuður" = c("*"),
+    "Launþegahópur" = c("*"),
+    "Breyting" = c("0")
+)
+
+
+d <- pxweb_get(url, query = pxweb_query(query_list), verbose = FALSE) |> 
+    as.data.frame() |> 
+    as_tibble() |> 
+    janitor::clean_names() |> 
+    mutate(ar = parse_number(ar)) |> 
+    rename(visitala = manadarleg_launavisitala_helstu_launthegahopa) |> 
+    filter(manudur != "Meðaltal ársins") |> 
+    mutate(id = row_number(),
+           manudur = fct_reorder(manudur, id, .fun = min) |> as.numeric() |> str_pad(side = "left", width = 2, pad = "0"),
+           dags = str_c(ar, "-", manudur, "-01") |> ymd()) |> 
+    select(dags, launthegahopur, visitala) |> 
+    group_by(launthegahopur) |> 
+    mutate(visitala = visitala / visitala[dags == min(dags)]) |> 
+    drop_na()
+```
+
+
+```{r}
+d |> 
+    filter(launthegahopur != "Opinberir starfsmenn - alls") |> 
+    ggplot(aes(dags, visitala)) +
+    geom_line(aes(col = launthegahopur)) +
+    theme(legend.position = "top") +
+    labs(x = NULL,
+         y = NULL,
+         col = NULL)
+```
+
+
+## Ársfjórðungstölur
+
+
+
+```{r}
+url <- "https://px.hagstofa.is:443/pxis/api/v1/is/Samfelag/launogtekjur/2_launavisitala/1_launavisitala/VIS04004.px"
+
+px_vars <- pxweb_get(url)
+
+query_list <- list(
+    "Ár" = c("*"),
+    "Ársfjórðungur" = c("*"),
+    "Launþegahópur" = c("*"),
+    "Breyting" = c("0")
+)
+
+
+d <- pxweb_get(url, query = pxweb_query(query_list), verbose = FALSE) |> 
+    as.data.frame() |> 
+    as_tibble() |> 
+    janitor::clean_names() |> 
+    mutate(ar = parse_number(ar)) |> 
+    rename(visitala = arsfjordungsleg_launavisitala_helstu_launthegahopa) |> 
+    filter(launthegahopur %in% c("Starfsmenn á almennum vinnumarkaði",
+                                 "Opinberir starfsmenn - alls"),
+           arsfjordungur != "Meðaltal ársins")  |>     
+    mutate(id = row_number(),
+           manudur = fct_reorder(arsfjordungur, id, .fun = min) |> as.numeric(),
+           manudur = 1 + (manudur - 1) * 3,
+           manudur = str_pad(manudur, width = 2, side = "left", pad = "0"),
+           dags = str_c(ar, "-", manudur, "-01") |> ymd()) |> 
+    select(dags, launthegahopur, visitala) |> 
+    # filter(year(dags) >= 2014) |> 
+    group_by(launthegahopur) |> 
+    mutate(visitala = visitala / visitala[dags == min(dags)])
+
+```
+
+
+```{r}
+d |> 
+    ggplot(aes(dags, visitala)) +
+    geom_line(aes(lty = launthegahopur)) +
+    theme(legend.position = "top") +
+    labs(x = NULL,
+         y = NULL,
+         lty = NULL)
+```
+
+## Heildarlaun (Ársfjórðungs)
+
+
+
+```{r}
+url <- "https://px.hagstofa.is:443/pxis/api/v1/is/Samfelag/launogtekjur/2_launavisitala/1_launavisitala/VIS04006.px"
+
+px_vars <- pxweb_get(url)
+
+query_list <- list(
+    "Ársfjórðungur" = c("*"),
+    "Atvinnugreinar/Launþegahópur" = c("*"),
+    "Breytingar" = c("IX")
+)
+
+
+d <- pxweb_get(url, query = pxweb_query(query_list), verbose = FALSE) |> 
+    as.data.frame() |> 
+    as_tibble() |> 
+    janitor::clean_names() |> 
+    rename(visitala = visitala_heildarlauna_eftir_atvinnugrein_og_launthegahopi_fra_2008_arsfjordungsleg) |> 
+    filter(launthegahopur %in% c("Starfsmenn á almennum vinnumarkaði",
+                                 "Opinberir starfsmenn - alls"),
+           arsfjordungur != "Meðaltal ársins")  |>     
+    mutate(id = row_number(),
+           manudur = fct_reorder(arsfjordungur, id, .fun = min) |> as.numeric(),
+           manudur = 1 + (manudur - 1) * 3,
+           manudur = str_pad(manudur, width = 2, side = "left", pad = "0"),
+           dags = str_c(ar, "-", manudur, "-01") |> ymd()) |> 
+    select(dags, launthegahopur, visitala) |> 
+    # filter(year(dags) >= 2014) |> 
+    group_by(launthegahopur) |> 
+    mutate(visitala = visitala / visitala[dags == min(dags)])
+
+d
+
 ```
