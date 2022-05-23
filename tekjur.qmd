@@ -999,14 +999,40 @@ d <- pxweb_get(url, query = pxweb_query(query_list), verbose = FALSE) |>
 ```
 
 
+### Munur frá 2005
+
 ```{r}
-d |> 
-    ggplot(aes(dags, visitala)) +
-    geom_line(aes(lty = launthegahopur)) +
+plot_dat <- d |> 
+    arrange(dags, desc(launthegahopur)) |> 
+    # filter(year(dags) >= 2014) |> 
+    group_by(launthegahopur) |>
+    mutate(visitala = visitala / visitala[dags == min(dags)]) |>
+    group_by(dags) |> 
+    summarise(munur = exp(diff(log(visitala))),
+              .groups = "drop")
+
+p <- plot_dat |> 
+    ggplot(aes(dags, munur)) +
+    geom_hline(yintercept = 1, lty = 2) +
+    geom_line() +
+    geom_rangeframe() +
+    scale_x_date(breaks = seq.Date(from = min(plot_dat$dags),
+                                   to = max(plot_dat$dags),
+                                   by = "year"),
+                 date_labels = "%Y") +
+    scale_y_continuous(labels = function(x) percent(x - 1),
+                  breaks = c(range(plot_dat$munur), 1, 0.975, 1.025)) +
+    theme_tufte() +
     theme(legend.position = "top") +
-    labs(x = NULL,
-         y = NULL,
-         lty = NULL)
+    labs(lty = NULL, x = NULL, y = NULL,
+         title = "Munur (%) á hækkun launavísitölu opinbers og almenns vinnumarkaðar frá 2005",
+         subtitle = "Jákvæð prósenta þýðir að opinber laun hafa hækkað meira síðan 2005",
+         caption = "Kóði og gögn: https://github.com/bgautijonsson/tekjur")
+
+p
+
+ggsave(plot = p, filename = "munur_launavisitala_2005.png",
+       width = 8, height = 0.5 * 8, scale = 1.3, bg = "white")
 ```
 
 ## Heildarlaun (Ársfjórðungs)
@@ -1029,20 +1055,40 @@ d <- pxweb_get(url, query = pxweb_query(query_list), verbose = FALSE) |>
     as.data.frame() |> 
     as_tibble() |> 
     janitor::clean_names() |> 
-    rename(visitala = visitala_heildarlauna_eftir_atvinnugrein_og_launthegahopi_fra_2008_arsfjordungsleg) |> 
-    filter(launthegahopur %in% c("Starfsmenn á almennum vinnumarkaði",
-                                 "Opinberir starfsmenn - alls"),
-           arsfjordungur != "Meðaltal ársins")  |>     
-    mutate(id = row_number(),
-           manudur = fct_reorder(arsfjordungur, id, .fun = min) |> as.numeric(),
-           manudur = 1 + (manudur - 1) * 3,
+    separate(arsfjordungur, into = c("ar", "manudur"), sep = "Á", convert = T) |> 
+    mutate(manudur = 1 + (manudur - 1) * 3,
            manudur = str_pad(manudur, width = 2, side = "left", pad = "0"),
            dags = str_c(ar, "-", manudur, "-01") |> ymd()) |> 
-    select(dags, launthegahopur, visitala) |> 
-    # filter(year(dags) >= 2014) |> 
-    group_by(launthegahopur) |> 
-    mutate(visitala = visitala / visitala[dags == min(dags)])
-
-d
+    select(dags, flokkur = atvinnugreinar_launthegahopur, 
+           visitala = visitala_heildarlauna_eftir_atvinnugrein_og_launthegahopi_fra_2008_arsfjordungsleg)
 
 ```
+
+
+```{r, fig.width = 10, fig.asp = 0.5}
+
+plot_dat <- d |> 
+    filter(flokkur %in% c("Starfsmenn á almennum vinnumarkaði", "Opinberir starfsmenn"),
+           year(dags) >= 2000) |> 
+    group_by(flokkur) |>
+    mutate(visitala = visitala / visitala[dags == min(dags)]) |>
+    group_by(dags) |> 
+    summarise(munur = exp(diff(log(visitala))),
+              .groups = "drop")
+
+plot_dat |> 
+    ggplot(aes(dags, munur)) +
+    geom_hline(yintercept = 1, lty = 2) +
+    geom_line() +
+    geom_rangeframe() +
+    scale_x_date(breaks = seq.Date(from = ymd("2008-01-01"),
+                                   to = ymd("2021-10-01"),
+                                   by = "year"),
+                 date_labels = "%Y") +
+    scale_y_continuous(labels = function(x) percent(x - 1),
+                  breaks = c(range(plot_dat$munur), 1.05, 1.1)) +
+    theme_tufte() +
+    theme(legend.position = "top") +
+    labs(lty = NULL, x = NULL, y = NULL)
+```
+
